@@ -167,7 +167,7 @@ def compute_global_median_peaks(anno_leads, n_obs_signal, freq):
 # MID-LEVEL FUNCTIONS (Artifact Drops)
 # =======================================================================
 
-def drop_anno1_app(data, anno, rr, seg, freq):
+def reject_artifacts_rr_amplitude(data, anno, rr, seg, freq):
     if len(anno) <= 1:
         return anno.tolist() if isinstance(anno, np.ndarray) else list(anno), list(range(len(anno)))
         
@@ -325,7 +325,7 @@ def drop_anno1_app(data, anno, rr, seg, freq):
         
     return anno_new.tolist(), pos_anno_new
 
-def drop_anno2_app(data, anno, rr, seg, anno_orig, freq):
+def reject_artifacts_excursion(data, anno, rr, seg, anno_orig, freq):
     anno_new = np.array(anno)
     rr_new = np.array(rr)
     seg_new = np.array(seg)
@@ -440,7 +440,7 @@ def drop_anno2_app(data, anno, rr, seg, anno_orig, freq):
         
     return anno_new.tolist(), pos_anno_new
 
-def drop_anno3_app(anno, rr, seg, anno_orig):
+def reject_artifacts_peak_center(anno, rr, seg, anno_orig):
     anno_new = np.array(anno)
     rr_new = np.array(rr)
     seg_new = np.array(seg)
@@ -465,7 +465,7 @@ def drop_anno3_app(anno, rr, seg, anno_orig):
         
     return anno_new.tolist(), pos_anno_new
 
-def drop_anno5_app(data, anno, rr, seg, anno_orig):
+def reject_artifacts_baseline_trend(data, anno, rr, seg, anno_orig):
     anno_new = np.array(anno)
     rr_new = np.array(rr)
     seg_new = np.array(seg)
@@ -595,7 +595,7 @@ def preprocess_single_lead(data, freq):
         
         # drop_anno1_app fa dei controlli (?), dopodichè vengono ricalcolati i segmenti e le distanze RR
         # TODO: valutare se tenere o meno
-        paso1_beats, paso1_idx = drop_anno1_app(loess_data, loess_rpeaks, loess_rr, loess_seg, freq)
+        paso1_beats, paso1_idx = reject_artifacts_rr_amplitude(loess_data, loess_rpeaks, loess_rr, loess_seg, freq)
         seg1 = compute_segment_ecg_beats(loess_data, paso1_beats, freq)
         rr1 = np.diff(paso1_beats) if len(paso1_beats) > 1 else []
         
@@ -642,9 +642,9 @@ def filter_lead_artifacts(obj_pre_pantom, annos_ref, seg_ref, freq):
         tab_codes[:, 2] = 0
         
         # TODO: da implementare? Al momento sono stub
-        paso2_beats, paso2_idx = drop_anno2_app(loess_data, loess_rpeaks, loess_rr, loess_seg, loess_rpeaks, freq)
-        paso3_beats, paso3_idx = drop_anno3_app(loess_rpeaks, loess_rr, loess_seg, loess_rpeaks)
-        paso5_beats, paso5_idx = drop_anno5_app(loess_data, loess_rpeaks, loess_rr, loess_seg, loess_rpeaks)
+        paso2_beats, paso2_idx = reject_artifacts_excursion(loess_data, loess_rpeaks, loess_rr, loess_seg, loess_rpeaks, freq)
+        paso3_beats, paso3_idx = reject_artifacts_peak_center(loess_rpeaks, loess_rr, loess_seg, loess_rpeaks)
+        paso5_beats, paso5_idx = reject_artifacts_baseline_trend(loess_data, loess_rpeaks, loess_rr, loess_seg, loess_rpeaks)
         
         union = np.intersect1d(paso2_beats, np.intersect1d(paso3_beats, paso5_beats)) if len(paso5_beats) > 0 else np.intersect1d(paso2_beats, paso3_beats)
         
