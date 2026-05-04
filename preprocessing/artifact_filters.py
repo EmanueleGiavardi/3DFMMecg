@@ -3,64 +3,67 @@ import numpy as np
 class ArtifactFilters:
     @staticmethod
     def reject_rr_amplitude(data, anno, rr, seg, freq):
+        """
+        Step 1: Reject beats based on RR interval consistency and local amplitude.
+        (Original name: drop_anno1_app)
+        """
         if len(anno) <= 1:
-            return anno.tolist() if isinstance(anno, np.ndarray) else list(anno), list(range(len(anno)))
+            return anno.tolist() if isinstance(anno, np.ndarray) else list(anno), []
             
         anno_new = np.array(anno)
         rr_new = np.array(rr)
         seg_new = np.array(seg)
         anno_orig = np.array(anno)
         
-        thr_d_new = (2/3) * np.median(rr_new)
+        rr_threshold = (2/3) * np.median(rr_new)
         
-        def get_dist_anno(a):
+        def get_peak_distances(a):
             return np.diff(a) if len(a) > 1 else np.array([])
             
-        dist_anno_new = get_dist_anno(anno_new)
+        peak_diffs = get_peak_distances(anno_new)
         
-        def calc_seguir(rr_arr, seg_arr, d_anno):
+        def check_should_continue(rr_arr, seg_arr, diff_arr):
             if len(rr_arr) == 0: return False
-            c1 = np.sum(rr_arr < thr_d_new) > 0
-            c2 = np.sum(d_anno > (4/3)*np.median(rr_arr)) >= 1
-            c3_part1 = len(seg_arr) > (4/3)*(len(data)/freq)
+            cond1 = np.sum(rr_arr < rr_threshold) > 0
+            cond2 = np.sum(diff_arr > (4/3)*np.median(rr_arr)) >= 1
+            cond3_a = len(seg_arr) > (4/3)*(len(data)/freq)
             if len(rr_arr) > 1 and np.mean(rr_arr) != 0:
                 std_rr = np.std(rr_arr, ddof=1)
-                c3_part2 = (std_rr / np.mean(rr_arr)) > 0.2
+                cond3_b = (std_rr / np.mean(rr_arr)) > 0.2
             else:
-                c3_part2 = False
-            return c1 or c2 or (c3_part1 and c3_part2)
+                cond3_b = False
+            return cond1 or cond2 or (cond3_a and cond3_b)
 
-        seguir = calc_seguir(rr_new, seg_new, dist_anno_new)
-        time = 1
+        should_continue = check_should_continue(rr_new, seg_new, peak_diffs)
+        iteration_stage = 1
         
-        while seguir:
-            aqui = False
-            cond = rr_new < thr_d_new
+        while should_continue:
+            reject_mask = rr_new < rr_threshold
             
-            c2 = np.sum(dist_anno_new > (4/3)*np.median(rr_new)) >= 1
-            c1 = np.sum(rr_new < thr_d_new) == 0
-            if c2 and c1 and time == 1:
-                cond = dist_anno_new > (4/3)*np.median(rr_new)
-                time = 2
-                aqui = True
+            has_large_diffs = np.sum(peak_diffs > (4/3)*np.median(rr_new)) >= 1
+            has_no_short_rr = np.sum(rr_new < rr_threshold) == 0
+            
+            if has_large_diffs and has_no_short_rr and iteration_stage == 1:
+                reject_mask = peak_diffs > (4/3)*np.median(rr_new)
+                iteration_stage = 2
             else:
-                c3_part1 = len(seg_new) > (4/3)*(len(data)/freq)
+                is_long_recording = len(seg_new) > (4/3)*(len(data)/freq)
                 if len(rr_new) > 1 and np.mean(rr_new) != 0:
-                    c3_part2 = (np.std(rr_new, ddof=1) / np.mean(rr_new)) > 0.2
+                    high_variability = (np.std(rr_new, ddof=1) / np.mean(rr_new)) > 0.2
                 else:
-                    c3_part2 = False
-                if c3_part1 and c3_part2:
-                    cond = np.array([True]*(len(seg_new)-2) + [False])
+                    high_variability = False
+                if is_long_recording and high_variability:
+                    reject_mask = np.array([True]*(len(seg_new)-2) + [False])
                     
-            cond_idx = np.where(cond)[0]
-            if len(cond_idx) == 0: break
+            target_indices = np.where(reject_mask)[0]
+            if len(target_indices) == 0: break
                 
-            ext_mismo1 = anno_new[cond_idx] - int(np.ceil(0.02*freq))
-            ext_mismo2 = anno_new[cond_idx] + int(np.ceil(0.02*freq))
-            ext_mas_uno1 = anno_new[cond_idx+1] - int(np.ceil(0.02*freq))
-            ext_mas_uno2 = anno_new[cond_idx+1] + int(np.ceil(0.02*freq))
-            ext_menos_uno1 = anno_new[cond_idx] - int(np.ceil(0.02*freq))
-            ext_menos_uno2 = anno_new[cond_idx] + int(np.ceil(0.02*freq))
+            # Range analysis around the peaks
+            window = int(np.ceil(0.02*freq))
+            range_current_start = anno_new[target_indices] - window
+            range_current_end = anno_new[target_indices] + window
+            range_next_start = anno_new[target_indices+1] - window
+            range_next_end = anno_new[target_indices+1] + window
             
             def get_range_amp(d, start, end):
                 s = max(0, int(start))
@@ -68,302 +71,245 @@ class ArtifactFilters:
                 if s >= e: return 0
                 return np.max(d[s:e]) - np.min(d[s:e])
 
-            mismo = np.array([get_range_amp(data, ext_mismo1[i], ext_mismo2[i]) for i in range(len(cond_idx))])
-            mas_uno = np.array([get_range_amp(data, ext_mas_uno1[i], ext_mas_uno2[i]) for i in range(len(cond_idx))])
+            amp_current = np.array([get_range_amp(data, range_current_start[i], range_current_end[i]) for i in range(len(target_indices))])
+            amp_next = np.array([get_range_amp(data, range_next_start[i], range_next_end[i]) for i in range(len(target_indices))])
             
-            une = []
-            for i, j_idx in enumerate(cond_idx):
-                s = max(0, int(seg_new[j_idx, 0]))
-                e = min(len(data), int(seg_new[j_idx, 1])+1)
-                dd = data[s:e] if s < e else np.array([0])
-                dd_amp = np.max(dd) - np.min(dd)
+            to_merge = []
+            for i, idx in enumerate(target_indices):
+                s = max(0, int(seg_new[idx, 0]))
+                e = min(len(data), int(seg_new[idx, 1])+1)
+                segment_data = data[s:e] if s < e else np.array([0])
+                segment_amp = np.max(segment_data) - np.min(segment_data)
                 
-                cond1 = abs(mismo[i] - mas_uno[i]) > 0.25 * dd_amp
-                cond2 = dd_amp > 2 * abs(mismo[i]) and dd_amp > 2 * abs(mas_uno[i])
-                cond3 = abs(mismo[i] - mas_uno[i]) < 0.25 * dd_amp
+                c1 = abs(amp_current[i] - amp_next[i]) > 0.25 * segment_amp
+                c2 = segment_amp > 2 * abs(amp_current[i]) and segment_amp > 2 * abs(amp_next[i])
+                c3 = abs(amp_current[i] - amp_next[i]) < 0.25 * segment_amp
                 
-                if (cond1 or (cond2 and cond3)) and (seg_new[j_idx+1, 0] - seg_new[j_idx, 1] < (1/3)*np.median(rr_new)):
-                    if mismo[i] > mas_uno[i]:
-                        une.append(j_idx + 1)
+                if (c1 or (c2 and c3)) and (seg_new[idx+1, 0] - seg_new[idx, 1] < (1/3)*np.median(rr_new)):
+                    if amp_current[i] > amp_next[i]:
+                        to_merge.append(idx + 1)
                     else:
-                        une.append(j_idx)
+                        to_merge.append(idx)
                         
-            une = np.unique(une)
-            anno_drop = anno_new.copy()
-            if len(une) > 0:
-                anno_drop = np.delete(anno_new, une)
-                anno_new = anno_drop.copy()
-                seg_new = np.delete(seg_new, une, axis=0)
+            to_merge = np.unique(to_merge)
+            if len(to_merge) > 0:
+                anno_new = np.delete(anno_new, to_merge)
+                seg_new = np.delete(seg_new, to_merge, axis=0)
                 
-            rr_new = get_dist_anno(anno_new)
+            rr_new = get_peak_distances(anno_new)
             
-            elimina = []
-            if len(anno_drop) > 2 and time == 1:
-                for j in range(1, len(anno_drop)-1):
-                    inf = anno_drop[j] - int(np.ceil(0.02*freq))
-                    sup = anno_drop[j] + int(np.ceil(0.02*freq))
-                    inf_sig = anno_drop[j+1] - int(np.ceil(0.02*freq))
-                    sup_sig = anno_drop[j+1] + int(np.ceil(0.02*freq))
-                    inf_ant = anno_drop[j-1] - int(np.ceil(0.02*freq))
-                    sup_ant = anno_drop[j-1] + int(np.ceil(0.02*freq))
+            to_delete = []
+            if len(anno_new) > 2 and iteration_stage == 1:
+                for j in range(1, len(anno_new)-1):
+                    win_curr_s, win_curr_e = anno_new[j] - window, anno_new[j] + window
+                    win_next_s, win_next_e = anno_new[j+1] - window, anno_new[j+1] + window
+                    win_prev_s, win_prev_e = anno_new[j-1] - window, anno_new[j-1] + window
                     
-                    def get_max(d, start, end):
-                        s = max(0, int(start))
-                        e = min(len(d), int(end)+1)
-                        if s >= e: return -np.inf
-                        return np.max(d[s:e])
+                    def get_max_in_range(d, start, end):
+                        s, e = max(0, int(start)), min(len(d), int(end)+1)
+                        return np.max(d[s:e]) if s < e else -np.inf
                         
-                    val_curr = get_max(data, inf, sup)
-                    val_ant = get_max(data, inf_ant, sup_ant)
-                    val_sig = get_max(data, inf_sig, sup_sig)
+                    val_curr = get_max_in_range(data, win_curr_s, win_curr_e)
+                    val_prev = get_max_in_range(data, win_prev_s, win_prev_e)
+                    val_next = get_max_in_range(data, win_next_s, win_next_e)
                     
-                    cond_ant = (2 * val_ant < val_curr)
-                    cond_sup = (2 * val_sig < val_curr)
+                    is_much_higher_than_prev = (2 * val_prev < val_curr)
+                    is_much_higher_than_next = (2 * val_next < val_curr)
                     
-                    s = max(0, int(seg_new[j, 0]))
-                    e = min(len(data), int(seg_new[j, 1]))
-                    len_seg = e - s
-                    
+                    seg_len = min(len(data), int(seg_new[j, 1])) - max(0, int(seg_new[j, 0]))
                     std_rr = np.std(rr_new, ddof=1) if len(rr_new) > 1 else 0
                     mean_rr = np.mean(rr_new) if len(rr_new) > 0 else 1
-                    if mean_rr == 0: mean_rr = 1
                     
-                    if (cond_ant or cond_sup) and len_seg < (2/3)*freq and (std_rr / mean_rr) < 0.2:
-                        if cond_ant: elimina.append(j-1)
-                        else: elimina.append(j+1)
+                    if (is_much_higher_than_prev or is_much_higher_than_next) and seg_len < (2/3)*freq and (std_rr / mean_rr) < 0.2:
+                        if is_much_higher_than_prev: to_delete.append(j-1)
+                        else: to_delete.append(j+1)
                             
-                if len(elimina) > 0:
-                    elimina = np.unique(elimina)
-                    anno_drop = np.delete(anno_drop, elimina)
-                    seg_new = np.delete(seg_new, elimina, axis=0)
+                if len(to_delete) > 0:
+                    to_delete = np.unique(to_delete)
+                    anno_new = np.delete(anno_new, to_delete)
+                    seg_new = np.delete(seg_new, to_delete, axis=0)
                     
-            time = 2
-            
-            if len(elimina) > 0:
-                anno_new = anno_drop.copy()
-                
-            rr_new = get_dist_anno(anno_new)
+            iteration_stage = 2
+            rr_new = get_peak_distances(anno_new)
             if len(rr_new) > 0:
-                thr_d_new = (2/3)*np.median(rr_new)
+                rr_threshold = (2/3)*np.median(rr_new)
             
             if len(anno_new) <= 1:
-                seguir = False
+                should_continue = False
             else:
-                dist_anno_new = get_dist_anno(anno_new)
-                seguir = np.sum(rr_new < thr_d_new) > 0
-                if len(une) == 0 and len(elimina) == 0:
-                    seguir = False
+                peak_diffs = get_peak_distances(anno_new)
+                should_continue = np.sum(rr_new < rr_threshold) > 0
+                if len(to_merge) == 0 and len(to_delete) == 0:
+                    should_continue = False
                     
-        pos_anno_new = []
-        for a in anno_new:
-            pos_anno_new.append(np.where(anno_orig == a)[0][0])
-            
-        return anno_new.tolist(), pos_anno_new
+        rejected_indices = [i for i, a in enumerate(anno_orig) if a not in anno_new]
+        return anno_new.tolist(), rejected_indices
 
     @staticmethod
     def reject_excursion(data, anno, rr, seg, anno_orig, freq):
+        """
+        Step 2: Reject beats based on signal excursion (identifying flat lines or noise).
+        (Original name: drop_anno2_app)
+        """
         anno_new = np.array(anno)
-        rr_new = np.array(rr)
         seg_new = np.array(seg)
         anno_orig = np.array(anno_orig)
         
         if len(anno_new) <= 1:
-            return anno_new.tolist(), list(range(len(anno_new)))
+            return anno_new.tolist(), []
             
-        primero = False
-        segundo = False
+        condition_1 = False
+        condition_2 = False
         
-        def get_a_b(seg_n, d, anno_n):
+        def get_boundary_samples(seg_n, d):
             if len(seg_n) == 0: return np.array([]), np.array([])
-            s1 = max(0, int(seg_n[0, 0]))
-            e1 = min(len(d), int(seg_n[0, 1]))
-            if e1 > s1: e_a = max(s1 + int(np.ceil(0.02*(e1 - s1))), 1 + int(np.ceil(0.02*(e1 - s1))))
-            else: e_a = s1
-            a_arr = d[s1:e_a]
+            # Start of first segment
+            s1, e1 = max(0, int(seg_n[0, 0])), min(len(d), int(seg_n[0, 1]))
+            end_a = max(s1 + int(np.ceil(0.02*(e1 - s1))), 1) if e1 > s1 else s1
+            samples_a = d[s1:end_a]
             
-            s_end = max(0, int(seg_n[-1, 0]))
-            e_end = min(len(d), int(seg_n[-1, 1]))
-            if e_end > s_end:
-                c = int(np.ceil(0.02*(e_end - s_end)))
-                s_b = min(len(d) - c, e_end) - c
-            else: s_b = e_end
-            b_arr = d[max(0, s_b):e_end]
-            return a_arr, b_arr
+            # End of last segment
+            s_end, e_end = max(0, int(seg_n[-1, 0])), min(len(d), int(seg_n[-1, 1]))
+            window = int(np.ceil(0.02*(e_end - s_end))) if e_end > s_end else 0
+            start_b = max(0, e_end - window)
+            samples_b = d[start_b:e_end]
+            return samples_a, samples_b
 
-        a_arr, b_arr = get_a_b(seg_new, data, anno_new)
+        samples_a, samples_b = get_boundary_samples(seg_new, data)
         
-        ini1 = max(0, int(seg_new[0, 0]))
-        e1 = min(len(data), int(seg_new[0, 1]))
-        c_len = e1 - ini1
-        ini2 = ini1 - 1 + int(np.ceil(0.15 * c_len))
-        fin1 = e1 + 1 - int(np.ceil(0.15 * c_len))
-        fin2 = e1
+        # Initial segment range analysis
+        start_idx, end_idx = max(0, int(seg_new[0, 0])), min(len(data), int(seg_new[0, 1]))
+        total_len = end_idx - start_idx
+        range_start = start_idx - 1 + int(np.ceil(0.15 * total_len))
+        range_end = end_idx + 1 - int(np.ceil(0.15 * total_len))
         
-        data_norm = data[ini1:fin2]
+        data_norm = data[start_idx:end_idx]
         if len(data_norm) > 0:
-            val_min = np.min(data_norm)
-            val_max = np.max(data_norm)
-            v_min = np.argmin(data_norm)
-            v_max = np.argmax(data_norm)
-            diff1 = abs(val_min - val_max)
-            if v_min <= (ini2 - ini1) or v_max <= (ini2 - ini1):
-                primero = True
+            val_min, val_max = np.min(data_norm), np.max(data_norm)
+            idx_min, idx_max = np.argmin(data_norm), np.argmax(data_norm)
+            excursion_1 = abs(val_min - val_max)
+            if idx_min <= (range_start - start_idx) or idx_max <= (range_start - start_idx):
+                condition_1 = True
         else:
-            diff1 = 0
+            excursion_1 = 0
 
-        diff_arr = []
+        excursions = []
         for j in range(1, len(seg_new)):
-            i1 = max(0, int(seg_new[j, 0]))
-            e2 = min(len(data), int(seg_new[j, 1]))
-            dn = data[i1:e2]
-            if len(dn) > 0: diff_arr.append(abs(np.min(dn) - np.max(dn)))
-            else: diff_arr.append(0)
+            s, e = max(0, int(seg_new[j, 0])), min(len(data), int(seg_new[j, 1]))
+            dn = data[s:e]
+            excursions.append(abs(np.min(dn) - np.max(dn)) if len(dn) > 0 else 0)
                 
-        if len(diff_arr) > 0:
-            med_diff = np.median(diff_arr)
-            if diff1 > (2/3)*med_diff or diff1 < (2/3)*med_diff:
-                if primero: segundo = True
+        if len(excursions) > 0:
+            median_excursion = np.median(excursions)
+            if excursion_1 > (2/3)*median_excursion or excursion_1 < (2/3)*median_excursion:
+                if condition_1: condition_2 = True
                 
         def get_sd_mean(arr):
             if len(arr) < 2: return 0, 1
             return np.std(arr, ddof=1), np.mean(arr)
             
-        def calc_seguir(sn, an, a_a, b_a, seg2):
+        def check_should_continue(sn, an, samples_a, samples_b, cond2):
             if len(sn) <= 1: return False
-            med_seg = np.median(sn[:, 1] - sn[:, 0])
-            c1 = (sn[0, 1] - sn[0, 0]) < (0.9 * med_seg) and len(an) > 1
-            sd_a, mean_a = get_sd_mean(a_a)
+            med_seg_len = np.median(sn[:, 1] - sn[:, 0])
+            c1 = (sn[0, 1] - sn[0, 0]) < (0.9 * med_seg_len) and len(an) > 1
+            sd_a, mean_a = get_sd_mean(samples_a)
             c2 = (sd_a / abs(mean_a)) < 0.01 if mean_a != 0 else False
             c3 = (sd_a / abs(mean_a)) < 0.02 and len(an) >= 0.04*freq if mean_a != 0 else False
-            return c1 or c2 or c3 or seg2
+            return c1 or c2 or c3 or cond2
             
-        seguir = calc_seguir(seg_new, anno_new, a_arr, b_arr, segundo)
+        should_continue = check_should_continue(seg_new, anno_new, samples_a, samples_b, condition_2)
         
-        while seguir:
-            anno_drop = anno_new[1:]
-            anno_new = anno_drop
-            rr_new = np.diff(anno_new) if len(anno_new) > 1 else np.array([])
+        while should_continue:
+            anno_new = anno_new[1:]
             seg_new = seg_new[1:]
             if len(anno_new) <= 1:
-                seguir = False
+                should_continue = False
             else:
-                med_seg = np.median(seg_new[:, 1] - seg_new[:, 0])
-                seguir = (seg_new[0, 1] - seg_new[0, 0]) < (0.85 * med_seg) and len(anno_new) > 1
+                med_seg_len = np.median(seg_new[:, 1] - seg_new[:, 0])
+                should_continue = (seg_new[0, 1] - seg_new[0, 0]) < (0.85 * med_seg_len) and len(anno_new) > 1
 
         if len(anno_new) > 1:
-            med_seg = np.median(seg_new[:, 1] - seg_new[:, 0])
-            sd_b, mean_b = get_sd_mean(b_arr)
-            c1 = (seg_new[-1, 1] - seg_new[-1, 0]) < (0.9 * med_seg)
+            med_seg_len = np.median(seg_new[:, 1] - seg_new[:, 0])
+            sd_b, mean_b = get_sd_mean(samples_b)
+            c1 = (seg_new[-1, 1] - seg_new[-1, 0]) < (0.9 * med_seg_len)
             c2 = (sd_b / abs(mean_b)) < 0.01 if mean_b != 0 else False
             c3 = (sd_b / abs(mean_b)) < 0.02 and len(anno_new) >= 0.04*freq if mean_b != 0 else False
-            seguir = c1 or c2 or c3
+            should_continue = c1 or c2 or c3
             
-        while seguir:
-            anno_drop = anno_new[:-1]
-            anno_new = anno_drop
-            rr_new = np.diff(anno_new) if len(anno_new) > 1 else np.array([])
+        while should_continue:
+            anno_new = anno_new[:-1]
             seg_new = seg_new[:-1]
             if len(anno_new) <= 1:
-                seguir = False
+                should_continue = False
             else:
-                med_seg = np.median(seg_new[:, 1] - seg_new[:, 0])
-                seguir = (seg_new[-1, 1] - seg_new[-1, 0]) < (0.85 * med_seg) and len(anno_new) > 1
+                med_seg_len = np.median(seg_new[:, 1] - seg_new[:, 0])
+                should_continue = (seg_new[-1, 1] - seg_new[-1, 0]) < (0.85 * med_seg_len) and len(anno_new) > 1
                 
-        pos_anno_new = []
-        for a in anno_new:
-            idx = np.where(anno_orig == a)[0]
-            if len(idx) > 0: pos_anno_new.append(idx[0])
-            
-        return anno_new.tolist(), pos_anno_new
+        rejected_indices = [i for i, a in enumerate(anno_orig) if a not in anno_new]
+        return anno_new.tolist(), rejected_indices
 
     @staticmethod
     def reject_peak_center(anno, rr, seg, anno_orig):
+        """
+        Step 3: Reject beats where the R-peak is not correctly centered within its segment.
+        (Original name: drop_anno3_app)
+        """
         anno_new = np.array(anno)
-        rr_new = np.array(rr)
         seg_new = np.array(seg)
         anno_orig = np.array(anno_orig)
         
         if len(anno_new) > 1 and len(seg_new) > 0:
             seg_len = seg_new[:, 1] - seg_new[:, 0]
-            pos_in_seg = anno_new - seg_new[:, 0] + 1
-            cond1 = (seg_len * 0.35) > pos_in_seg
-            cond2 = pos_in_seg > (0.45 * seg_len)
-            seguir = np.sum(cond1 | cond2) >= 1
-            if seguir:
-                donde = np.where(cond1 | cond2)[0]
-                anno_new = np.delete(anno_new, donde)
-                seg_new = np.delete(seg_new, donde, axis=0)
-                rr_new = np.diff(anno_new) if len(anno_new) > 1 else np.array([])
+            relative_pos = anno_new - seg_new[:, 0] + 1
+            is_too_early = (seg_len * 0.35) > relative_pos
+            is_too_late = relative_pos > (0.45 * seg_len)
+            to_reject = np.where(is_too_early | is_too_late)[0]
+            if len(to_reject) > 0:
+                anno_new = np.delete(anno_new, to_reject)
+                seg_new = np.delete(seg_new, to_reject, axis=0)
                 
-        pos_anno_new = []
-        for a in anno_new:
-            idx = np.where(anno_orig == a)[0]
-            if len(idx) > 0: pos_anno_new.append(idx[0])
-            
-        return anno_new.tolist(), pos_anno_new
+        rejected_indices = [i for i, a in enumerate(anno_orig) if a not in anno_new]
+        return anno_new.tolist(), rejected_indices
 
     @staticmethod
     def reject_baseline_trend(data, anno, rr, seg, anno_orig):
+        """
+        Step 5: Reject beats based on significant baseline wander trends between start and end.
+        (Original name: drop_anno5_app)
+        """
         anno_new = np.array(anno)
-        rr_new = np.array(rr)
         seg_new = np.array(seg)
         anno_orig = np.array(anno_orig)
-        seguir = False
         
         if len(anno_new) > 1:
-            dife = np.zeros(len(anno_new))
-            amp = np.zeros(len(anno_new))
-            condi_key = np.zeros(len(anno_new), dtype=bool)
-            revisar_key = []
+            diff_start_end, amplitude = np.zeros(len(anno_new)), np.zeros(len(anno_new))
+            is_bad_trend = np.zeros(len(anno_new), dtype=bool)
+            to_review = []
             
             for j in range(len(anno_new)):
-                ini1 = max(0, int(seg_new[j, 0]))
-                e2 = min(len(data), int(seg_new[j, 1]))
-                c_len = e2 - ini1
+                start, end = max(0, int(seg_new[j, 0])), min(len(data), int(seg_new[j, 1]))
+                beat_len = end - start
                 
-                ini2 = ini1 - 1 + int(np.ceil(0.05 * c_len))
-                fin1 = e2 + 1 - int(np.ceil(0.05 * c_len))
-                fin2 = e2
-                
-                data_norm = data[ini1:fin2]
-                
-                if len(data_norm) > 0:
-                    s1 = 0
-                    e1 = max(0, ini2 - ini1 + 1)
-                    s2 = max(0, fin1 - ini1)
-                    e2_dn = max(0, fin2 - ini1)
+                # Check consistency of median values at the beginning and end of the segment
+                data_segment = data[start:end]
+                if len(data_segment) > 0:
+                    edge_size = int(np.ceil(0.05 * beat_len))
+                    val_start = np.median(data_segment[:edge_size]) if edge_size > 0 else 0
+                    val_end = np.median(data_segment[-edge_size:]) if edge_size > 0 else 0
                     
-                    d_ini = data_norm[s1:e1]
-                    d_fin = data_norm[s2:e2_dn]
+                    diff_start_end[j] = abs(val_end - val_start)
+                    amplitude[j] = abs(np.max(data_segment) - np.min(data_segment))
                     
-                    val_ini = np.median(d_ini) if len(d_ini) > 0 else 0
-                    val_fin = np.median(d_fin) if len(d_fin) > 0 else 0
-                    
-                    dife[j] = abs(val_fin - val_ini)
-                    amp[j] = abs(np.max(data_norm) - np.min(data_norm))
-                    
-                    condi_key[j] = dife[j] > 0.15 * amp[j]
-                    if condi_key[j]: revisar_key.append(j)
+                    is_bad_trend[j] = diff_start_end[j] > 0.15 * amplitude[j]
+                    if is_bad_trend[j]: to_review.append(j)
                 
-            if np.sum(condi_key) >= 4:
-                condi_key = np.ones(len(anno_new), dtype=bool)
-                dife = np.full(len(anno_new), 999.0)
-                amp = np.ones(len(anno_new))
+            # If too many beats are bad, reject the whole lead
+            if np.sum(is_bad_trend) >= 4:
+                to_review = list(range(len(anno_new)))
                 
-            if len(revisar_key) > 0: seguir = True
-            
-            if seguir:
-                donde = np.where(dife > amp)[0].tolist() + revisar_key
-                donde = np.unique(donde)
+            if len(to_review) > 0:
+                to_reject = np.unique(np.where(diff_start_end > amplitude)[0].tolist() + to_review)
+                anno_new = np.delete(anno_new, to_reject)
                 
-                anno_new = np.delete(anno_new, donde)
-                rr_new = np.diff(anno_new) if len(anno_new) > 1 else np.array([])
-                seg_new = np.delete(seg_new, donde, axis=0)
-                
-        pos_anno_new = []
-        for a in anno_new:
-            idx = np.where(anno_orig == a)[0]
-            if len(idx) > 0: pos_anno_new.append(idx[0])
-            
-        return anno_new.tolist(), pos_anno_new
-
+        rejected_indices = [i for i, a in enumerate(anno_orig) if a not in anno_new]
+        return anno_new.tolist(), rejected_indices

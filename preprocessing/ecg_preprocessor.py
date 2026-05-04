@@ -62,17 +62,14 @@ class ECGPreprocessor:
         
         all_peaks_data = []
         for lp in self.lead_processors:
-            peaks = lp.paso1_beats if len(lp.paso1_beats) > 0 else lp.local_rpeaks
-            for p in peaks:
-                all_peaks_data.append((p, lp.lead_idx))
+            peaks = lp.filter1_beats if len(lp.filter1_beats) > 0 else lp.local_rpeaks
+            for p in peaks: all_peaks_data.append((p, lp.lead_idx))
 
         # all_peaks_data is list of tuple: (rpeak, lead_idx) sorted by rpeak        
 
         if all_peaks_data:
-            all_peaks_data.sort(key=lambda x: x[0])
-            anno_leads = np.array(all_peaks_data).T
-        
-            self.global_rpeaks, _, self.global_segments = compute_global_median_peaks(anno_leads, n_samples, self.freq)
+            all_peaks_data.sort(key=lambda x: x[0])        
+            self.global_rpeaks, _, self.global_segments = compute_global_median_peaks(all_peaks_data, n_samples, self.freq)
             self.error_preprocessing = False
         else:
             self.error_preprocessing = True
