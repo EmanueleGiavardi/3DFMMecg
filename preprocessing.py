@@ -38,7 +38,10 @@ def detect_rpeaks(signal_arr, sRate, lowcut=1e-9, highcut=15, filter_order=1,
     # R returns 1-indexed peaks / sRate
     return (np.array(peaks) + 1) / sRate
 
-def give_sucesive_ecg(v_annot_n, freq):
+def classify_rr_intervals(v_annot_n, freq):
+    """
+    Classifica gli intervalli RR come successivi, precedenti o normali tramite euristica (threshold basato sulla mediana)
+    """
     if len(v_annot_n) > 1:
         l_rr = np.diff(v_annot_n)
         if np.sum(l_rr > freq) > 0.75 * len(l_rr) and len(l_rr) > 3:
@@ -71,8 +74,11 @@ def give_sucesive_ecg(v_annot_n, freq):
         fin = np.array([])
     return fin, M
 
-def give_segments_ecg(all_ecg, all_rpeaks, freq):
-    fin, med_rr = give_sucesive_ecg(all_rpeaks, freq)
+def compute_segment_ecg_beats(all_ecg, all_rpeaks, freq):
+    """
+    Estrae i segmenti di ECG corrispondenti a ogni battito
+    """
+    fin, med_rr = classify_rr_intervals(all_rpeaks, freq)
     if not np.isnan(med_rr) and len(fin) > 0:
         datpac_len = len(all_ecg)
         bound_beats = np.zeros((len(all_rpeaks), 2), dtype=int)
@@ -104,7 +110,10 @@ def give_segments_ecg(all_ecg, all_rpeaks, freq):
     else: bound_beats = np.array([])
     return bound_beats
 
-def give_anno_med_app(anno_leads, n_obs_signal, freq):
+def compute_global_median_peaks(anno_leads, n_obs_signal, freq):
+    """
+    Calcola i picchi mediani globali di un ECG e fonde i picchi di 12 derivazioni in un unico segnale globale
+    """
     # aux_beates -> array di indici dei picchi R
     # aux_leads -> array inutile dei numeri delle derivazioni   
     aux_beats, aux_leads = anno_leads[0], anno_leads[1]
@@ -143,7 +152,7 @@ def give_anno_med_app(anno_leads, n_obs_signal, freq):
 
     annos_pac = np.array(final_beats)
     leads_pac = final_leads
-    seg_pac = give_segments_ecg(np.zeros(n_obs_signal), annos_pac, freq)
+    seg_pac = compute_segment_ecg_beats(np.zeros(n_obs_signal), annos_pac, freq)
     if len(seg_pac) > 0:
         if seg_pac[0, 0] < 0: seg_pac[0, 0] = 0
         if seg_pac[-1, 1] > n_obs_signal - 1: seg_pac[-1, 1] = n_obs_signal - 1
@@ -520,7 +529,11 @@ def drop_anno5_app(data, anno, rr, seg, anno_orig):
         
     return anno_new.tolist(), pos_anno_new
 
-def lead_pre_pan_tom_app(data, freq):
+def preprocess_single_lead(data, freq):
+    """
+    Rimuove baseline wander (LOESS) e cerca i picchi R sulla singola derivazione
+    """
+    # Rimuove NaN e sostituisce con 0
     data = np.nan_to_num(data, copy=True)
     n_samples = len(data)
     # check: almeno il 75% dei campioni non è zero
@@ -570,7 +583,7 @@ def lead_pre_pan_tom_app(data, freq):
             except:
                 break
                 
-        loess_seg = give_segments_ecg(loess_data, loess_rpeaks, freq)
+        loess_seg = compute_segment_ecg_beats(loess_data, loess_rpeaks, freq)
         loess_rr = np.diff(loess_rpeaks) if len(loess_rpeaks) > 1 else []
         
         # matrice 3xN con:
@@ -583,7 +596,7 @@ def lead_pre_pan_tom_app(data, freq):
         # drop_anno1_app fa dei controlli (?), dopodichè vengono ricalcolati i segmenti e le distanze RR
         # TODO: valutare se tenere o meno
         paso1_beats, paso1_idx = drop_anno1_app(loess_data, loess_rpeaks, loess_rr, loess_seg, freq)
-        seg1 = give_segments_ecg(loess_data, paso1_beats, freq)
+        seg1 = compute_segment_ecg_beats(loess_data, paso1_beats, freq)
         rr1 = np.diff(paso1_beats) if len(paso1_beats) > 1 else []
         
         if len(paso1_beats) > 0:
@@ -611,9 +624,10 @@ def lead_pre_pan_tom_app(data, freq):
         "paso1": paso1_beats                # picchi dopo drop_anno1_app
     }
 
-def lead_pre_multi_app(obj_pre_pantom, annos_ref, seg_ref, freq):
-    # R equivalent: leadPreMulti_app
-    # Evaluates artifacts against global median annotations
+def filter_lead_artifacts(obj_pre_pantom, annos_ref, seg_ref, freq):
+    """
+    Usa i picchi globali per rimuovere falsi positivi sulla singola derivazione
+    """
     loess_rpeaks = annos_ref
     loess_seg = seg_ref
     loess_rr = np.diff(loess_rpeaks) if len(loess_rpeaks) > 1 else []
@@ -659,7 +673,7 @@ def lead_pre_multi_app(obj_pre_pantom, annos_ref, seg_ref, freq):
 # TOP-LEVEL ORCHESTRATOR
 # =======================================================================
 
-def give_preprocessing_git(data_in, freq_hz):
+def preprocess_ecg_pipeline(data_in, freq_hz):
     """
     R equivalent: givePreprocessing_git
     data_in: np.ndarray shape (n_leads, n_samples)
@@ -670,7 +684,7 @@ def give_preprocessing_git(data_in, freq_hz):
     
     # 1. Itera sulle derivazioni e applica LOESS + Pantompkins (individuazione picchi R sulle singole derivazioni)
     for i in range(n_leads):
-        res = lead_pre_pan_tom_app(data_in[i], freq_hz)
+        res = preprocess_single_lead(data_in[i], freq_hz)
         pre_results.append(res)
         
         peaks = res["loessRPeaksEnd"]
@@ -697,7 +711,7 @@ def give_preprocessing_git(data_in, freq_hz):
         # annos_pac -> array di indici dei picchi R (globali)
         # leads_pac -> array di indici delle derivazioni associati ad ogni picco R globale
         # seg_pac -> array di indici dei segmenti ECG ([inizio, fine])
-        annos_pac, leads_pac, seg_pac = give_anno_med_app(anno_leads, data_in.shape[1], freq_hz)
+        annos_pac, leads_pac, seg_pac = compute_global_median_peaks(anno_leads, data_in.shape[1], freq_hz)
 
         # sanity check
         if len(annos_pac) == len(leads_pac) == len(seg_pac): print(f"identificati {len(annos_pac)} complessi QRS")
@@ -706,7 +720,7 @@ def give_preprocessing_git(data_in, freq_hz):
         # 3. Pulizia delle singole derivazioni sulla base degli indici globali (annos_pac)
         pos_results = []
         for i in range(n_leads):
-            pos_res = lead_pre_multi_app(pre_results[i], annos_pac, seg_pac, freq_hz)
+            pos_res = filter_lead_artifacts(pre_results[i], annos_pac, seg_pac, freq_hz)
             pos_results.append(pos_res)
         pos_results = np.array(pos_results)
 
