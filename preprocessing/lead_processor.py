@@ -15,12 +15,13 @@ class LeadProcessor:
         self.n_samples = len(self.raw_data)
         self.patient_code = 1234
         
-        # Attributes matching R output dictionary keys
         self.loess_data = np.array([])
         self.loess_fitted = np.array([])
+
         self.loess_rpeaks_end = np.array([])
         self.loess_seg_end = np.array([])
         self.loess_rr_end = np.array([])
+        
         self.tab_codes = np.array([[self.patient_code, 1, 11]])
         self.filter1_beats = np.array([])
         
@@ -137,10 +138,6 @@ class LeadProcessor:
         return self
         
     def to_dict(self):
-        """
-        Returns a dictionary representation of the current state, 
-        matching the keys expected by the R port tests.
-        """
         return {
             "loessRPeaksEnd": self.loess_rpeaks_end,
             "loessSegEnd": self.loess_seg_end,
