@@ -3,6 +3,7 @@ import scipy.optimize
 from typing import List, Dict, Tuple
 from optimization.utils import plot_ecg_beat
 from optimization.fmm_wave import FMMWave
+from optimization.fmm_assigner import FMMAssigner
 
 class FMMOptimizer:
     """
@@ -25,6 +26,12 @@ class FMMOptimizer:
         self.omega_max = omega_max
         self._grid = None
         self._time_points = None
+
+        # Thresholds from thresholdsMultiFMM_ECG.R
+        self.RELEVANT_LEADS = ["I", "II", "V2", "V5"]
+        
+        # Wave Assigner (I-Step)
+        self.assigner = FMMAssigner()
 
     @staticmethod
     def generate_time_points(n_obs: int) -> np.ndarray:
@@ -168,19 +175,15 @@ class FMMOptimizer:
         
         # Calculate residual variance (sigma) per lead
         sigma = np.sum(residuals**2, axis=0) / (n_obs - 1)
-        
         # Weighted inverse of error
         error_weights = (1 / sigma) * signal_weights
         return error_weights / np.sum(error_weights)
 
-    def _assign_waves(self, parameters: List[Dict], n_obs: int, annotation: str) -> List[Dict]:
-        """
-        I-Step: Maps identified FMM waves to specific ECG components (P, Q, R, S, T).
-        Currently a placeholder for advanced sorting/assignment logic.
-        """
-        return parameters
+    # -----------------------------------------------------------------------
+    # Backfitting fitting loop
+    # -----------------------------------------------------------------------
 
-    def fit(self, ecg_data: np.ndarray, annotation: str, plot_ecg = False) -> Tuple[List[Dict], np.ndarray]:
+    def fit(self, ecg_data: np.ndarray, annotation: float, plot_ecg = False) -> Tuple[List[Dict], np.ndarray]:
         """
         Fits multiple FMM waves to a multi-lead ECG segment using iterative backfitting.
         
@@ -261,9 +264,7 @@ class FMMOptimizer:
             # Re-balance error weights between leads
             error_weights = self._update_error_weights(ecg_data, fitted_waves, signal_weights)
 
-        # I-Step: Wave Assignment (TODO)
-        lead_results = self._assign_waves(lead_results, n_obs, annotation)
+        # I-Step: Wave Assignment
+        lead_results = self.assigner.assign_waves(lead_results, n_obs, annotation)
         
         return lead_results, fitted_waves
-
-
