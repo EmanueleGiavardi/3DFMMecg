@@ -1,11 +1,15 @@
 import numpy as np
 
 class ArtifactFilters:
+    """
+    Classe statica per l'applicazione dei filtri per il rilevamento degli artefatti.
+    """
+    
     @staticmethod
     def reject_rr_amplitude(data, anno, rr, seg, freq):
         """
-        Step 1: Reject beats based on RR interval consistency and local amplitude.
-        (Original name: drop_anno1_app)
+        Filtro 1: Scarta i battiti basandosi sulla consistenza degli intervalli RR e sull'ampiezza locale.
+        (drop_anno1_app nel codice R)
         """
         if len(anno) <= 1:
             return anno.tolist() if isinstance(anno, np.ndarray) else list(anno), []
@@ -57,8 +61,7 @@ class ArtifactFilters:
                     
             target_indices = np.where(reject_mask)[0]
             if len(target_indices) == 0: break
-                
-            # Range analysis around the peaks
+
             window = int(np.ceil(0.02*freq))
             range_current_start = anno_new[target_indices] - window
             range_current_end = anno_new[target_indices] + window
@@ -148,8 +151,8 @@ class ArtifactFilters:
     @staticmethod
     def reject_excursion(data, anno, rr, seg, anno_orig, freq):
         """
-        Step 2: Reject beats based on signal excursion (identifying flat lines or noise).
-        (Original name: drop_anno2_app)
+        Filtro 2: Scarta i battiti basandosi sull'escursione del segnale (identificando linee piatte o rumore).
+        (drop_anno2_app nel codice R)
         """
         anno_new = np.array(anno)
         seg_new = np.array(seg)
@@ -163,12 +166,10 @@ class ArtifactFilters:
         
         def get_boundary_samples(seg_n, d):
             if len(seg_n) == 0: return np.array([]), np.array([])
-            # Start of first segment
             s1, e1 = max(0, int(seg_n[0, 0])), min(len(d), int(seg_n[0, 1]))
             end_a = max(s1 + int(np.ceil(0.02*(e1 - s1))), 1) if e1 > s1 else s1
             samples_a = d[s1:end_a]
             
-            # End of last segment
             s_end, e_end = max(0, int(seg_n[-1, 0])), min(len(d), int(seg_n[-1, 1]))
             window = int(np.ceil(0.02*(e_end - s_end))) if e_end > s_end else 0
             start_b = max(0, e_end - window)
@@ -176,8 +177,7 @@ class ArtifactFilters:
             return samples_a, samples_b
 
         samples_a, samples_b = get_boundary_samples(seg_new, data)
-        
-        # Initial segment range analysis
+
         start_idx, end_idx = max(0, int(seg_new[0, 0])), min(len(data), int(seg_new[0, 1]))
         total_len = end_idx - start_idx
         range_start = start_idx - 1 + int(np.ceil(0.15 * total_len))
@@ -251,8 +251,8 @@ class ArtifactFilters:
     @staticmethod
     def reject_peak_center(anno, rr, seg, anno_orig):
         """
-        Step 3: Reject beats where the R-peak is not correctly centered within its segment.
-        (Original name: drop_anno3_app)
+        Filtro 3: Scarta i battiti in cui il picco R non è correttamente centrato all'interno del segmento.
+        (drop_anno3_app nel codice R)
         """
         anno_new = np.array(anno)
         seg_new = np.array(seg)
@@ -274,8 +274,8 @@ class ArtifactFilters:
     @staticmethod
     def reject_baseline_trend(data, anno, rr, seg, anno_orig):
         """
-        Step 5: Reject beats based on significant baseline wander trends between start and end.
-        (Original name: drop_anno5_app)
+        Filtro 5: Scarta i battiti basandosi su trend significativi della baseline tra inizio e fine.
+        (drop_anno5_app nel codice R)
         """
         anno_new = np.array(anno)
         seg_new = np.array(seg)

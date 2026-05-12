@@ -5,7 +5,7 @@ from preprocessing.lead_processor import LeadProcessor
 
 class ECGPreprocessor:
     """
-    Top-level class to orchestrate the ECG preprocessing pipeline.
+    Classe per la gestione della pipeline di preprocessing del segnale ECG.
     """
     def __init__(self, freq_hz: int = 500):
         self.freq = freq_hz
@@ -18,25 +18,25 @@ class ECGPreprocessor:
         
     def run(self, data_in: np.ndarray):
         """
-        Executes the full preprocessing pipeline.
+        Esegue la pipeline completa di preprocessing.
         Args:
-            data_in: Input ECG data with shape (n_leads, n_samples).
+            data_in: Segnale ECG con shape (n_leads, n_samples).
             
         Returns:
             A tuple containing:
-                - pos_results: List of dictionaries with preprocessing results for each lead.
-                - m_detrend: Detrended ECG data with shape (n_leads, n_samples).
-                - error_preprocessing: Boolean indicating whether preprocessing was successful.
+                - pos_results: Dizionario con i risultati del preprocessing per ogni lead.
+                - m_detrend: Segnale ECG detrendato con shape (n_leads, n_samples).
+                - error_preprocessing: Booleano che indica un errore nel preprocessing.
         """
         n_leads, n_samples = data_in.shape[0], data_in.shape[1]
         
-        # 1: Individual Lead Processing
+        # 1) Elaborazione individuale di ogni derivazione
         self._initial_lead_processing(data_in)
         
-        # 2: Global Median Alignment
+        # 2) Allineamento globale con picchi di R medi
         self._global_alignment(n_samples)
         
-        # 3: Artifact Filtering
+        # 3) Filtraggio artefatti
         if not self.error_preprocessing:
             self._artifact_filtering(n_samples)
         else:
@@ -47,7 +47,7 @@ class ECGPreprocessor:
 
     def _initial_lead_processing(self, data_in):
         """
-        Removes baseline (low frequency components) and detects initial QRS for each lead.
+        Rimuove la baseline (componenti a bassa frequenza) e rileva i picchi QRS iniziali per ogni derivazione.
         """
         self.lead_processors = []
         for i in range(data_in.shape[0]):
@@ -57,16 +57,14 @@ class ECGPreprocessor:
 
     def _global_alignment(self, n_samples):
         """
-        Consolidates R-peaks from all leads into a median global set.
+        Allineamento globale dei picchi di R.
         """
-        
         all_peaks_data = []
         for lp in self.lead_processors:
             peaks = lp.filter1_beats if len(lp.filter1_beats) > 0 else lp.local_rpeaks
             for p in peaks: all_peaks_data.append((p, lp.lead_idx))
 
-        # all_peaks_data is list of tuple: (rpeak, lead_idx) sorted by rpeak        
-
+        # all_peaks_data è una lista di tuple: (rpeak, lead_idx) ordinata per rpeak        
         if all_peaks_data:
             all_peaks_data.sort(key=lambda x: x[0])        
             self.global_rpeaks, _, self.global_segments = compute_global_median_peaks(all_peaks_data, n_samples, self.freq)
@@ -77,7 +75,7 @@ class ECGPreprocessor:
 
     def _artifact_filtering(self, n_samples):
         """
-        Refines each lead's annotations based on the global median set.
+        Affina le annotazioni di ogni derivazione basandosi sul set mediano globale.
         """
         self.pos_results = []
         for lp in self.lead_processors:
@@ -86,7 +84,7 @@ class ECGPreprocessor:
             
         self.pos_results = np.array(self.pos_results)
         
-        # Assemble the detrended signal matrix
+        # Assembla la matrice di segnale detrended
         self.m_detrend = np.vstack([
             lp.loess_data if len(lp.loess_data) > 0 else np.full(n_samples, np.nan) 
             for lp in self.lead_processors

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class FMMWave:
-    """Parameters for a single FMM wave."""
+    """Parametri di una singola onda FMM."""
     M: float # shift verticale dell'onda
     A: float # ampiezza dell'onda
     alpha: float # locazione temporale dell'onda

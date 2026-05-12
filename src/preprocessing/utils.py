@@ -4,8 +4,7 @@ import scipy.signal
 def detect_rpeaks(signal_arr, sRate, lowcut=1e-9, highcut=15, filter_order=1, 
                   integration_window=15, refractory=200, limit_factor=3, return_index=False):
     """
-    Detects R-peaks in an ECG signal using the Pan-Tompkins algorithm.
-    Implementation matching the original working version.
+    Individua i picchi R nel segnale ECG utilizzando l'algoritmo di Pan-Tompkins.
     """
     b, a = scipy.signal.butter(filter_order, [lowcut, highcut], btype='bandpass', fs=sRate)
     padded_signal = np.concatenate([np.repeat(signal_arr[0], sRate), signal_arr, np.repeat(signal_arr[-1], sRate)])
@@ -14,10 +13,9 @@ def detect_rpeaks(signal_arr, sRate, lowcut=1e-9, highcut=15, filter_order=1,
     
     signal_diff = np.diff(signal_filt)
     signal_squared = signal_diff**2
-    # Keep length consistent after diff
+
     signal_squared = np.concatenate([[signal_squared[0]], signal_squared])
     
-    # Moving integration window
     xc = scipy.signal.convolve(signal_squared, np.ones(integration_window), mode='full')
     difflen = len(xc) - len(signal_squared)
     start_idx = int(difflen / 2)
@@ -37,17 +35,15 @@ def detect_rpeaks(signal_arr, sRate, lowcut=1e-9, highcut=15, filter_order=1,
     peaks = peaks[1:]
     if return_index:
         return np.array(peaks)
-    # Return 1-indexed seconds to match R logic (compensated in LeadProcessor)
     return (np.array(peaks) + 1) / sRate
 
 def classify_rr_intervals(v_annot_n, freq):
     """
-    Classifies RR intervals as subsequent, previous, or normal using heuristics.
-    Implementation matching the original working version.
+    Classifica gli intervalli RR come successivi, precedenti o normali usando euristiche.
     """
     if len(v_annot_n) > 1:
         l_rr = np.diff(v_annot_n)
-        # Filter outliers for median calculation
+        # Filtra gli outlier per il calcolo della mediana
         if np.sum(l_rr > freq) > 0.75 * len(l_rr) and len(l_rr) > 3:
             l_rr_sorted = np.sort(l_rr)
             l_rr = l_rr_sorted[:-3]
@@ -80,8 +76,7 @@ def classify_rr_intervals(v_annot_n, freq):
 
 def compute_segment_ecg_beats(all_ecg, all_rpeaks, freq):
     """
-    Extracts ECG segments corresponding to each beat.
-    Implementation matching the original working version with floor/ceil logic.
+    Estrae segmenti di ECG corrispondenti a ciascun battito.
     """
     fin, med_rr = classify_rr_intervals(all_rpeaks, freq)
     if not np.isnan(med_rr) and len(fin) > 0:
@@ -121,15 +116,13 @@ def compute_segment_ecg_beats(all_ecg, all_rpeaks, freq):
 
 def compute_global_median_peaks(all_peaks_data, n_obs_signal, freq):
     """
-    Computes global median peaks of an ECG and merges the peaks of multiple leads 
-    into a single global signal.
-    Implementation matching the original working version.
-    all_peaks_data: list of (peak_val, lead_idx)
+    Calcola i picchi medi globali di un ECG e fonde i picchi di più derivazioni 
+    in un unico segnale globale.
+    all_peaks_data: lista di (peak_val, lead_idx)
     """
     if not all_peaks_data:
         return np.array([]), np.array([]), np.array([])
         
-    # In the original version, all_peaks_data is sorted by peak value
     aux_beats = np.array([p for p, l in all_peaks_data])
     aux_leads = np.array([l for p, l in all_peaks_data])
     
@@ -139,9 +132,7 @@ def compute_global_median_peaks(all_peaks_data, n_obs_signal, freq):
     
     j = 1
     while j < len(aux_beats):
-        # If distance between current peak and previous is < 103ms, same heart beat
         if aux_beats[j] > (aux_beats[j-1] + limit1):
-            # If we have more than 3 annotations (detected in at least 4 leads), consider it a beat
             if len(v_beat) > 3:
                 beats.append(np.ceil(np.median(v_beat)))
                 leads.append(list(v_lead))
