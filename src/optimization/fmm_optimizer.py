@@ -173,7 +173,7 @@ class FMMOptimizer:
         return error_weights / np.sum(error_weights)
 
     def _recalculate_M_and_A(self, ecg_data: np.ndarray, lead_results: List[Dict], n_obs: int) -> List[Dict]:
-        """Ricalcola congiuntamente M e A per ogni derivazione usando la regressione lineare multipla
+        """Ricalcola M e A per ogni derivazione usando una regressione lineare multipla,
         mantenendo costanti i parametri non lineari (alpha, beta, omega)"""
         for lead_index in range(len(lead_results)):
             n_waves = len(lead_results[lead_index]["Alpha"])
@@ -234,8 +234,6 @@ class FMMOptimizer:
             
             for w in range(n_waves):
                 lead_results[lead_index]["Var"][w] = var_array[w]
-
-                
         return lead_results
 
     def _check_early_stop(self, lead_results: List[Dict]) -> bool:
@@ -272,12 +270,8 @@ class FMMOptimizer:
         
         for iteration in range(self.max_iter):
             current_lead_results = [{"M": [], "A": [], "Alpha": [], "Beta": [], "Omega": [], "Var": []} for _ in range(n_leads)]
-            print(f"Iterazione {iteration+1} ciclo principale")
             for wave_to_fit in range(self.n_waves):
 
-                print(f"Onda {wave_to_fit+1} ciclo principale")
-                print("fitted_waves", fitted_waves)
-                
                 # 1) CALCOLO DEI RESIDUI (ECG DATA - SOMMA DELLE ALTRE ONDE a parte quella corrente)
                 # other_waves_sum è un vettore (797, 8) (cioè num_samples, num_leads) perchè questa operazione sta andando a guardare 
                 # ogni quintupla di fitted_waves (cioè una lista relativa alle 5 onde da fittare, gli sta applicando una maschera 
@@ -351,8 +345,6 @@ class FMMOptimizer:
                         
                         fitted_waves[:, lead_index, w] = amp * np.cos(t_star + beta - alpha)
 
-                print("----------------------------------------------------------------------")
-            
             # 6) I-STEP: WAVE ASSIGNMENT (Labeling)
             current_lead_results = self.assigner.assign_waves(current_lead_results, n_obs, annotation)    
 
