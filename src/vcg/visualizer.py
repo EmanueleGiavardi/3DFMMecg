@@ -120,11 +120,13 @@ class VCGVisualizer:
             return [vmin - rng*pct, vmax + rng*pct]
 
         fig.update_layout(
+            height=700,
             scene=dict(
                 xaxis=dict(range=pad(all_x.min(), all_x.max()), title='Asse X'),
                 yaxis=dict(range=pad(all_y.min(), all_y.max()), title='Asse Y'),
                 zaxis=dict(range=pad(all_z.min(), all_z.max()), title='Asse Z'),
-                aspectmode='cube'
+                aspectmode='manual',
+                aspectratio=dict(x=1, y=1, z=1.5)
             ),
             title='VCG 3D Animato',
             updatemenus=[dict(
