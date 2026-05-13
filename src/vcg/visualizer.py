@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import plotly.graph_objects as go
+import plotly.subplots as sp
+import numpy as np
 
 class VCGVisualizer:
     """
@@ -79,4 +82,150 @@ class VCGVisualizer:
         if show:
             plt.show()
             
+        return fig
+
+    def animate_3d(self, step: int = 5):
+        """
+        Genera un'animazione 3D interattiva del VCG.
+        """
+        # step = ogni quanti frame visualizzare un punto nell'animazione
+        first_wave = list(self.vcg_waves.values())[0]
+        n_points = len(first_wave['X'])
+        
+        frame_indices = list(range(0, n_points, step))
+        if frame_indices[-1] != n_points - 1:
+            frame_indices.append(n_points - 1)
+            
+        fig = go.Figure()
+
+        for i, wave_data in self.vcg_waves.items():
+            color = self.colors[i % len(self.colors)]
+            label = self.labels[i] if self.labels is not None else f'Onda {i+1}'
+            
+            fig.add_trace(go.Scatter3d(
+                x=[wave_data['X'][0]],
+                y=[wave_data['Y'][0]],
+                z=[wave_data['Z'][0]],
+                mode='lines',
+                line=dict(color=color, width=4),
+                name=label
+            ))
+
+        all_x = np.concatenate([w['X'] for w in self.vcg_waves.values()])
+        all_y = np.concatenate([w['Y'] for w in self.vcg_waves.values()])
+        all_z = np.concatenate([w['Z'] for w in self.vcg_waves.values()])
+        
+        def pad(vmin, vmax, pct=0.1):
+            rng = vmax - vmin if vmax != vmin else 1
+            return [vmin - rng*pct, vmax + rng*pct]
+
+        fig.update_layout(
+            scene=dict(
+                xaxis=dict(range=pad(all_x.min(), all_x.max()), title='Asse X'),
+                yaxis=dict(range=pad(all_y.min(), all_y.max()), title='Asse Y'),
+                zaxis=dict(range=pad(all_z.min(), all_z.max()), title='Asse Z'),
+                aspectmode='cube'
+            ),
+            title='VCG 3D Animato',
+            updatemenus=[dict(
+                type="buttons",
+                buttons=[
+                    dict(label="Play",
+                         method="animate",
+                         args=[None, {"frame": {"duration": 20, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}]),
+                    dict(label="Pausa",
+                         method="animate",
+                         args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}])
+                ]
+            )]
+        )
+
+        frames = []
+        for k in frame_indices:
+            frame_data = []
+            for i, wave_data in self.vcg_waves.items():
+                frame_data.append(go.Scatter3d(
+                    x=wave_data['X'][:k+1],
+                    y=wave_data['Y'][:k+1],
+                    z=wave_data['Z'][:k+1],
+                    mode='lines'
+                ))
+            frames.append(go.Frame(data=frame_data, name=str(k)))
+            
+        fig.frames = frames
+        return fig
+
+    def animate_2d_planes(self, step: int = 5):
+        """
+        Genera un'animazione interattiva dei 3 piani 2D del VCG usando Plotly.
+        """
+        first_wave = list(self.vcg_waves.values())[0]
+        n_points = len(first_wave['X'])
+        
+        frame_indices = list(range(0, n_points, step))
+        if frame_indices[-1] != n_points - 1:
+            frame_indices.append(n_points - 1)
+            
+        fig = sp.make_subplots(rows=1, cols=3, 
+                               subplot_titles=('Piano Frontale (X, Y)', 'Piano Trasversale (X, Z)', 'Piano Sagittale (Z, Y)'))
+
+        all_x = np.concatenate([w['X'] for w in self.vcg_waves.values()])
+        all_y = np.concatenate([w['Y'] for w in self.vcg_waves.values()])
+        all_z = np.concatenate([w['Z'] for w in self.vcg_waves.values()])
+        
+        def pad(vmin, vmax, pct=0.1):
+            rng = vmax - vmin if vmax != vmin else 1
+            return [vmin - rng*pct, vmax + rng*pct]
+
+        for i, wave_data in self.vcg_waves.items():
+            color = self.colors[i % len(self.colors)]
+            label = self.labels[i] if self.labels is not None else f'Onda {i+1}'
+            
+            # frontale
+            fig.add_trace(go.Scatter(x=[wave_data['X'][0]], y=[wave_data['Y'][0]], 
+                                     mode='lines', line=dict(color=color, width=3), name=label, legendgroup=str(i)), 
+                          row=1, col=1)
+            # trasversale
+            fig.add_trace(go.Scatter(x=[wave_data['X'][0]], y=[wave_data['Z'][0]], 
+                                     mode='lines', line=dict(color=color, width=3), name=label, legendgroup=str(i), showlegend=False), 
+                          row=1, col=2)
+            # sagittale
+            fig.add_trace(go.Scatter(x=[wave_data['Z'][0]], y=[wave_data['Y'][0]], 
+                                     mode='lines', line=dict(color=color, width=3), name=label, legendgroup=str(i), showlegend=False), 
+                          row=1, col=3)
+
+        fig.update_xaxes(title_text="Asse X", range=pad(all_x.min(), all_x.max()), row=1, col=1)
+        fig.update_yaxes(title_text="Asse Y", range=pad(all_y.min(), all_y.max()), row=1, col=1)
+        
+        fig.update_xaxes(title_text="Asse X", range=pad(all_x.min(), all_x.max()), row=1, col=2)
+        fig.update_yaxes(title_text="Asse Z", range=pad(all_z.min(), all_z.max()), row=1, col=2)
+        
+        fig.update_xaxes(title_text="Asse Z", range=pad(all_z.min(), all_z.max()), row=1, col=3)
+        fig.update_yaxes(title_text="Asse Y", range=pad(all_y.min(), all_y.max()), row=1, col=3)
+
+        fig.update_layout(
+            title='Proiezioni VCG 2D Animate',
+            updatemenus=[dict(
+                type="buttons",
+                buttons=[
+                    dict(label="Play",
+                         method="animate",
+                         args=[None, {"frame": {"duration": 20, "redraw": False}, "fromcurrent": True, "transition": {"duration": 0}}]),
+                    dict(label="Pausa",
+                         method="animate",
+                         args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}])
+                ]
+            )]
+        )
+
+        frames = []
+        for k in frame_indices:
+            frame_data = []
+            for i, wave_data in self.vcg_waves.items():
+                frame_data.append(go.Scatter(x=wave_data['X'][:k+1], y=wave_data['Y'][:k+1], mode='lines'))
+                frame_data.append(go.Scatter(x=wave_data['X'][:k+1], y=wave_data['Z'][:k+1], mode='lines'))
+                frame_data.append(go.Scatter(x=wave_data['Z'][:k+1], y=wave_data['Y'][:k+1], mode='lines'))
+            frames.append(go.Frame(data=frame_data, name=str(k)))
+            
+        fig.frames = frames
         return fig
