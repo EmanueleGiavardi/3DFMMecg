@@ -32,7 +32,7 @@ class VCGVisualizer:
             color = self.colors[i % len(self.colors)]
             label = self.labels[i] if self.labels is not None else f'Onda {i+1}'
             
-            ax.plot(wave_data['X'], wave_data['Y'], wave_data['Z'], color=color, label=label, linewidth=2.5)
+            ax.plot(wave_data['X'], wave_data['Y'], wave_data['Z'], color=color, label=label, linewidth=1.0)
             
         ax.set_xlabel('Asse X (Destra-Sinistra)')
         ax.set_ylabel('Asse Y (Superiore-Inferiore)')

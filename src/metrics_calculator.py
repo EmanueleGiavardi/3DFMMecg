@@ -15,6 +15,45 @@ class VCGComparator:
         peak_idx = np.argmax(norms)
         return trajectory[peak_idx]
 
+    @staticmethod
+    def _compute_qrs_t_angle_for_array(arr: np.ndarray) -> float:
+        """
+        Trova l'angolo QRS-T per un singolo array VCG.
+        """
+        norms = np.linalg.norm(arr, axis=1)
+        n_samples = len(norms)
+        
+        # Trova il picco QRS
+        idx_qrs = np.argmax(norms)
+        v_qrs = arr[idx_qrs]
+        
+        # Trova il picco T (nell'ultima parte del battito)
+        start_t_search = int(n_samples * 0.6)
+        if start_t_search <= idx_qrs: start_t_search = idx_qrs + int(n_samples * 0.1)
+            
+        idx_t_relative = np.argmax(norms[start_t_search:])
+        idx_t = start_t_search + idx_t_relative
+        v_t = arr[idx_t]
+        
+        # Calcolo dell'angolo 3D
+        dot_product = np.dot(v_qrs, v_t)
+        norm_product = np.linalg.norm(v_qrs) * np.linalg.norm(v_t)
+        cos_theta = np.clip(dot_product / norm_product, -1.0, 1.0)
+        
+        return float(np.degrees(np.arccos(cos_theta)))
+
+    def compute_qrs_t_angle_error(self) -> tuple:
+        """
+        Calcola l'angolo QRS-T per entrambi i VCG e ne estrae l'errore.
+        Returns:
+            tuple: (angolo_ref, angolo_test, errore_angolare_assoluto)
+        """
+        angle_ref = self._compute_qrs_t_angle_for_array(self.ref_array)
+        angle_test = self._compute_qrs_t_angle_for_array(self.test_array)
+        error = abs(angle_ref - angle_test)
+        
+        return angle_ref, angle_test, error
+
     def compute_ae(self) -> float:
         """Angular Error (AE) globale."""
         p_peak = self._get_peak_vector(self.test_array)
@@ -67,7 +106,6 @@ class VCGComparator:
         return {'AR_ref': ar_ref, 'AR_test': ar_test, 'AR_discrepancy': ar_diff}
 
 
-# --- FUNZIONI DI ORCHESTRAZIONE DATAFRAME ---
 
 def compute_all_metrics(result_vcgs: dict) -> pd.DataFrame:
     """Trasforma il dizionario dei VCG estratti in un DataFrame di metriche raw."""
@@ -81,7 +119,6 @@ def compute_all_metrics(result_vcgs: dict) -> pd.DataFrame:
             vcg_fmm = beat_data['VCG_fmm']
             vcg_kors = beat_data['VCG_kors']
             
-            # Helper per calcolare e appendere il record per un metodo
             def append_method_record(method_name, vcg_test):
                 comp = VCGComparator(vcg_gt, vcg_test)
                 lar = comp.compute_lar_global()
@@ -96,7 +133,8 @@ def compute_all_metrics(result_vcgs: dict) -> pd.DataFrame:
                     'LAR_yz': lar['yz'],
                     'AR_discrepancy': ar['AR_discrepancy'],
                     'AE': comp.compute_ae(),
-                    'PVE': comp.compute_pve()
+                    'PVE': comp.compute_pve(),
+                    'QRST_angle': comp.compute_qrs_t_angle_error()[2]
                 })
 
             append_method_record('FMM_Allineato', vcg_fmm)
@@ -107,17 +145,15 @@ def compute_all_metrics(result_vcgs: dict) -> pd.DataFrame:
 
 def create_aggregated_metrics_dataframe(df_metrics: pd.DataFrame) -> pd.DataFrame:
     """Aggrega le metriche raw calcolando Media e Dev.Std per paziente e metodo."""
-    metrics_to_aggregate = ['LAR_xy', 'LAR_xz', 'LAR_yz', 'AR_discrepancy', 'AE', 'PVE']
+    metrics_to_aggregate = ['LAR_xy', 'LAR_xz', 'LAR_yz', 'AR_discrepancy', 'AE', 'PVE', 'QRST_angle']
     cols_to_agg = [col for col in metrics_to_aggregate if col in df_metrics.columns]
     
     agg_funcs = {col: ['mean', 'std'] for col in cols_to_agg}
     df_agg = df_metrics.groupby(['patient_id', 'Metodo']).agg(agg_funcs)
     
-    # Appiattimento dei multi-index delle colonne
     df_agg.columns = [f"{col[0]}_{col[1]}" for col in df_agg.columns]
     df_agg = df_agg.reset_index()
     
-    # Conteggio battiti validi analizzati
     beat_counts = df_metrics.groupby(['patient_id', 'Metodo'])['beat_idx'].count().reset_index()
     beat_counts = beat_counts.rename(columns={'beat_idx': 'num_beats_analyzed'})
     
