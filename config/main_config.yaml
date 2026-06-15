@@ -1,0 +1,39 @@
+# ==========================================
+# CONFIGURAZIONE PRINCIPALE PIPELINE VCG
+# ==========================================
+
+# Directory di base (relativa alla root del progetto)
+directories:
+  results: "results"
+  r_params: "data/R_params"
+  r_preproc: "data/R_preproc"
+  dataset: "data/PTB"
+
+# strategie disponibili: "local_alignment", "global_alignment_lstsq", "global_alignment_avg" 
+pipeline_params:
+  strategy_name: "global_alignment_avg" 
+  test_size: 0.3
+  random_state: 42
+  shuffle: true
+  iso_samples: 20
+  percentile: 99
+  num_beats: 30
+
+# Nomi dei file di output per ogni strategia di allineamento
+output_filenames:
+  predictions: "vcg_predictions.json"
+  raw_metrics: "metrics_raw.csv"
+  agg_metrics: "metrics_aggregated.csv"
+
+# Struttura delle cartelle per i plot
+plot_subfolders:
+  base: "plots"
+  peak:
+    - "peak/AE"
+    - "peak/PVE"
+    - "peak/QRST_angle"
+  morph:
+    - "morph/AR"
+    - "morph/LAR/XY"
+    - "morph/LAR/XZ"
+    - "morph/LAR/YZ"
