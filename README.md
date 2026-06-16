@@ -1,4 +1,4 @@
-# 3D-FMM VCG Alignment & Evaluation
+# Mapping Cardiac Anatomy Through The Lens Of Vision
 
 Questo repository contiene la pipeline computazionale per l'estrazione, la ricostruzione e l'allineamento spaziale del Vettorcardiogramma (VCG) a partire da segnali ECG, utilizzando il modello parametrico 3D-FMM. 
 Il progetto valuta diverse strategie di allineamento spaziale (Globali vs. Locali) confrontandole con le baseline cliniche (metodo di Kors), calcolando metriche morfologiche e vettoriali per valutarne l'accuratezza rispetto al Ground Truth (sistema di Frank).
