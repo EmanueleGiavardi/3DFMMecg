@@ -5,7 +5,7 @@ Il progetto valuta diverse strategie di allineamento spaziale (Globali vs. Local
 
 ---
 
-## Struttura del Progetto
+## 📂 Struttura del Progetto
 
 ```text
 3DFMMecg/
@@ -44,7 +44,7 @@ Il progetto valuta diverse strategie di allineamento spaziale (Globali vs. Local
 └── requirements.txt                 # Dipendenze Python
 ```
 
-## Prerequisiti e Installazione
+## 📥 Prerequisiti e Installazione
 
 L'esecuzione della pipeline richiede la configurazione di due ambienti separati (R e Python).
 1. Ambiente R
@@ -64,7 +64,7 @@ source 3DFMMecg_venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Esecuzione della Pipeline
+## ⚙️ Esecuzione della Pipeline
 
 **Attenzione**: Tutti i comandi seguenti devono essere lanciati dalla root directory del progetto, (`3DFMMecg/`).
 I parametri di esecuzione, le directory di input/output e le impostazioni degli esperimenti sono centralizzati nel file ```config/main_config.yaml```. Modificare questo file per cambiare strategia di allineamento o altri parametri della pipeline.
@@ -76,7 +76,7 @@ Il primo step elabora i segnali ECG originali, applica il pre-processing ed eseg
 ```
 Rscript src/R/export_data.R
 ```
-**NOTA COMPUTAZIONALE**: *questo step ha impiegato circa 18 ore su CPU: 11th Gen Intel i7-11700K (16) @ 4.900GHz, estraendo dati di preprocessing e parametri FMM di TUTTI i battiti (in media circa 150) per i primi 31 pazienti*.
+⚠️ **NOTA COMPUTAZIONALE**: *questo step ha impiegato circa 18 ore su CPU: 11th Gen Intel i7-11700K (16) @ 4.900GHz, estraendo dati di preprocessing e parametri FMM di TUTTI i battiti (in media circa 150) per i primi 31 pazienti*.
 
 I file generati verranno salvati nelle cartelle ```data/R_preproc/``` e ```data/R_params/``` (come definito nel config).
 
