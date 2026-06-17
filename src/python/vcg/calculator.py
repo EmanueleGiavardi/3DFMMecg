@@ -50,14 +50,8 @@ class VCGCalculator:
             phi_II = self._evaluate_wave_phase(alpha_II, beta_II, omega_II)
             phi_V2 = self._evaluate_wave_phase(alpha_V2, beta_V2, omega_V2)
             
-            # Proiezione su asse 3D
-            # 1) Asse X (Coronale Left-Right): Diretto estrapolato DII cos
             X = A_II * np.cos(phi_II)
-            
-            # 2) Asse Y (Coronale Superior-Inferior): Trasformata di Hilbert di DII = DII sin
             Y = A_II * np.sin(phi_II)
-            
-            # 3) Asse Z (Sagittale Anteroposterior): Modulato su derivazione Anteriore V2 bilanciato per Y
             Z = A_V2 * np.cos(phi_V2) - 2 * Y
             
             vcg_waves[i] = {
@@ -87,26 +81,17 @@ class VCGCalculator:
         total_Y = np.zeros_like(self.time_points)
         total_Z = np.zeros_like(self.time_points)
         
-        # somma vettoriale punto per punto
         for wave_data in vcg_waves.values():
             total_X += wave_data['X']
             total_Y += wave_data['Y']
             total_Z += wave_data['Z']
 
         if include_baseline:
-            # Estraiamo l'intercetta M (usiamo il primo indice poiché M è identica 
-            # per tutte le onde dello stesso lead dopo il ricalcolo congiunto)
             M_II = self.params_lead_II['M'][0] if len(self.params_lead_II.get('M', [])) > 0 else 0.0
             M_V2 = self.params_lead_V2['M'][0] if len(self.params_lead_V2.get('M', [])) > 0 else 0.0
             
-            # Applichiamo alle costanti M le stesse proiezioni lineari degli assi:
-            # Asse X dipendente da Lead II
             total_X += M_II 
-            
-            # Asse Y rappresenta la componente immaginaria/Hilbert (la componente continua DC è nulla)
             total_Y += 0.0 
-            
-            # Asse Z modulato su V2 e corretto per l'apporto di Y
             total_Z += (M_V2 - 2 * 0.0) 
             
         return {

@@ -11,7 +11,7 @@ directories:
 
 # strategie disponibili: "local_alignment", "global_alignment_lstsq", "global_alignment_avg" 
 pipeline_params:
-  strategy_name: "global_alignment_avg" 
+  strategy_name: "local_alignment" 
   test_size: 0.3
   random_state: 42
   shuffle: true
