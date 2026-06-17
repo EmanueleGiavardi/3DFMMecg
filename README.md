@@ -76,7 +76,8 @@ Il primo step elabora i segnali ECG originali, applica il pre-processing ed eseg
 ```
 Rscript src/R/export_data.R
 ```
-**NOTA COMPUTAZIONALE**: *questo step ha impiegato circa 18 ore su CPU: 11th Gen Intel i7-11700K (16) @ 4.900GHz, estraendo TUTTI i battiti (in media circa 150) per i primi 31 pazienti*
+**NOTA COMPUTAZIONALE**: *questo step ha impiegato circa 18 ore su CPU: 11th Gen Intel i7-11700K (16) @ 4.900GHz, estraendo dati di preprocessing e parametri FMM di TUTTI i battiti (in media circa 150) per i primi 31 pazienti*.
+
 I file generati verranno salvati nelle cartelle ```data/R_preproc/``` e ```data/R_params/``` (come definito nel config).
 
 ### Fase 2: Creazione, Allineamento VCG e Calcolo Metriche (Python)
